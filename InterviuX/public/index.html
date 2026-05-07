@@ -93,7 +93,28 @@ input[type=file]{display:none}
 /* ─── QUESTION BOX ─── */
 .q-box{background:var(--surface);border:1px solid var(--purple);border-radius:14px;padding:1.75rem;font-size:1.05rem;color:var(--text);line-height:1.65;min-height:100px;position:relative}
 .q-number{font-size:.65rem;font-family:var(--mono);color:var(--purple);letter-spacing:2px;text-transform:uppercase;margin-bottom:.75rem}
-.q-type-badge{display:inline-flex;align-items:center;gap:5px;font-size:.65rem;font-family:var(--mono);padding:3px 8px;border-radius:4px;background:rgba(124,92,252,.15);color:var(--purple2);border:1px solid rgba(124,92,252,.2);position:absolute;top:1rem;right:1rem}
+.q-type-badge{display:inline-flex;align-items:center;gap:5px;font-size:.65rem;font-family:var(--mono);padding:3px 8px;border-radius:4px;background:rgba(124,92,252,.15);color:var(--purple2);border:1px solid rgba(124,92,252,.2);position:absolute;top:1rem;right:6.5rem}
+
+/* ─── TTS ─── */
+.tts-btn{position:absolute;top:.85rem;right:.85rem;display:flex;align-items:center;gap:5px;background:rgba(124,92,252,.15);border:1px solid rgba(124,92,252,.25);border-radius:7px;padding:.3rem .65rem;cursor:pointer;font-size:.72rem;font-family:var(--mono);color:var(--purple2);transition:all .2s}
+.tts-btn:hover{background:rgba(124,92,252,.28);color:#fff}
+.tts-btn.speaking{background:rgba(124,92,252,.3);border-color:var(--purple);animation:pulse-purple 1.4s infinite}
+.tts-btn.muted{background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.3);color:var(--red)}
+@keyframes pulse-purple{0%,100%{box-shadow:0 0 0 0 rgba(124,92,252,.4)}50%{box-shadow:0 0 0 5px rgba(124,92,252,0)}}
+.tts-wave{display:inline-flex;align-items:center;gap:2px;height:12px}
+.tts-wave span{display:inline-block;width:2px;background:var(--purple2);border-radius:2px;animation:wave-bar .8s ease-in-out infinite}
+.tts-wave span:nth-child(1){animation-delay:0s;height:4px}
+.tts-wave span:nth-child(2){animation-delay:.15s;height:8px}
+.tts-wave span:nth-child(3){animation-delay:.3s;height:12px}
+.tts-wave span:nth-child(4){animation-delay:.45s;height:8px}
+.tts-wave span:nth-child(5){animation-delay:.6s;height:4px}
+@keyframes wave-bar{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+.tts-controls{display:flex;align-items:center;gap:.5rem;margin-top:.85rem;padding-top:.75rem;border-top:1px solid var(--border)}
+.tts-mute-btn{display:flex;align-items:center;gap:5px;background:transparent;border:1px solid var(--border2);border-radius:6px;padding:.3rem .7rem;cursor:pointer;font-size:.72rem;font-family:var(--mono);color:var(--muted);transition:all .2s}
+.tts-mute-btn:hover{border-color:var(--purple);color:var(--purple2)}
+.tts-mute-btn.muted{border-color:rgba(248,113,113,.3);color:var(--red)}
+.tts-speed{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:.3rem .5rem;font-size:.72rem;font-family:var(--mono);color:var(--text2);cursor:pointer;outline:none}
+.tts-speed option{background:var(--surface2)}
 
 /* ─── ANSWER AREA ─── */
 .answer-area{margin-top:1rem}
@@ -335,7 +356,25 @@ input[type=file]{display:none}
         <div class="q-box" id="questionBox">
           <div class="q-number" id="qNumberLabel">QUESTION 1 OF 5</div>
           <div class="q-type-badge" id="qTypeBadge">⚙ Technical</div>
+          <button class="tts-btn" id="ttsBtn" onclick="toggleSpeak()" title="Play / Pause question audio">
+            <span id="ttsBtnIcon">🔊</span>
+            <span id="ttsBtnLabel">Play</span>
+          </button>
           <div id="questionText" class="loading-dots">Generating question</div>
+          <div class="tts-controls" id="ttsControls" style="display:none">
+            <div class="tts-wave" id="ttsWave" style="display:none">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <span id="ttsSpeakingLabel" style="font-size:.7rem;font-family:var(--mono);color:var(--purple2);display:none">AI speaking...</span>
+            <div style="flex:1"></div>
+            <button class="tts-mute-btn" id="ttsMuteBtn" onclick="toggleMute()">🔊 Auto-play on</button>
+            <select class="tts-speed" id="ttsSpeed" onchange="updateTTSSpeed(this.value)" title="Speaking speed">
+              <option value="0.8">Slow</option>
+              <option value="1" selected>Normal</option>
+              <option value="1.3">Fast</option>
+            </select>
+            <select class="tts-speed" id="ttsVoice" onchange="updateTTSVoice(this.value)" title="Voice"></select>
+          </div>
         </div>
 
         <!-- Answer Section -->
@@ -517,6 +556,11 @@ let state = {
   techScores: [],
   commScores: [],
   confScores: [],
+  // tts
+  ttsEnabled: true,
+  ttsSpeaking: false,
+  ttsRate: 1,
+  ttsVoice: null,
   // audio
   mediaRecorder: null,
   recognition: null,
@@ -655,7 +699,7 @@ function renderResults(a) {
 // RESET
 // ═══════════════════════════════════════════════════════
 function resetAll() {
-  stopCamera(); stopMic();
+  stopTTS(); stopCamera(); stopMic();
   state.selectedFile = null;
   state.analysisData = null;
   document.getElementById('fileInput').value = '';
@@ -768,8 +812,10 @@ async function fetchNextQuestion() {
     document.getElementById('qNumberLabel').textContent = `QUESTION ${state.questionCount} OF ${state.maxQuestions}`;
     document.getElementById('questionText').className = '';
     document.getElementById('questionText').textContent = data.question;
+    document.getElementById('ttsControls').style.display = 'flex';
     document.getElementById('answerArea').style.display = 'block';
     state.visualReadings = [];
+    if (state.ttsEnabled) speakQuestion(data.question);
   } catch (err) {
     document.getElementById('questionText').className = '';
     document.getElementById('questionText').textContent = 'Error: ' + err.message;
@@ -944,7 +990,7 @@ function endInterviewEarly() {
 // SESSION SUMMARY
 // ═══════════════════════════════════════════════════════
 async function showSessionSummary() {
-  stopCamera(); stopMic();
+  stopTTS(); stopCamera(); stopMic();
 
   const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
   const avgTech = avg(state.techScores);
@@ -1416,17 +1462,122 @@ function clearHistory() {
 }
 
 // ═══════════════════════════════════════════════════════
+// TEXT-TO-SPEECH (AI Interviewer Voice)
+// ═══════════════════════════════════════════════════════
+function speakQuestion(text) {
+  if (!window.speechSynthesis) return;
+  stopTTS();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.rate = state.ttsRate;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  if (state.ttsVoice) utterance.voice = state.ttsVoice;
+
+  utterance.onstart = () => {
+    state.ttsSpeaking = true;
+    document.getElementById('ttsBtn').className = 'tts-btn speaking';
+    document.getElementById('ttsBtnIcon').textContent = '⏸';
+    document.getElementById('ttsBtnLabel').textContent = 'Pause';
+    document.getElementById('ttsWave').style.display = 'inline-flex';
+    document.getElementById('ttsSpeakingLabel').style.display = 'inline';
+  };
+  utterance.onend = utterance.onerror = () => {
+    state.ttsSpeaking = false;
+    document.getElementById('ttsBtn').className = 'tts-btn';
+    document.getElementById('ttsBtnIcon').textContent = '🔊';
+    document.getElementById('ttsBtnLabel').textContent = 'Replay';
+    document.getElementById('ttsWave').style.display = 'none';
+    document.getElementById('ttsSpeakingLabel').style.display = 'none';
+  };
+
+  window.speechSynthesis.speak(utterance);
+  state.currentUtterance = utterance;
+}
+
+function stopTTS() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  state.ttsSpeaking = false;
+  const btn = document.getElementById('ttsBtn');
+  if (btn) {
+    btn.className = 'tts-btn';
+    document.getElementById('ttsBtnIcon').textContent = '🔊';
+    document.getElementById('ttsBtnLabel').textContent = 'Replay';
+  }
+  const wave = document.getElementById('ttsWave');
+  if (wave) wave.style.display = 'none';
+  const lbl = document.getElementById('ttsSpeakingLabel');
+  if (lbl) lbl.style.display = 'none';
+}
+
+function toggleSpeak() {
+  if (!window.speechSynthesis) { alert('Text-to-speech not supported in this browser. Use Chrome or Edge.'); return; }
+  if (state.ttsSpeaking) {
+    window.speechSynthesis.pause();
+    state.ttsSpeaking = false;
+    document.getElementById('ttsBtn').className = 'tts-btn';
+    document.getElementById('ttsBtnIcon').textContent = '▶';
+    document.getElementById('ttsBtnLabel').textContent = 'Resume';
+    document.getElementById('ttsWave').style.display = 'none';
+    document.getElementById('ttsSpeakingLabel').style.display = 'none';
+  } else if (window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
+    state.ttsSpeaking = true;
+    document.getElementById('ttsBtn').className = 'tts-btn speaking';
+    document.getElementById('ttsBtnIcon').textContent = '⏸';
+    document.getElementById('ttsBtnLabel').textContent = 'Pause';
+    document.getElementById('ttsWave').style.display = 'inline-flex';
+    document.getElementById('ttsSpeakingLabel').style.display = 'inline';
+  } else {
+    speakQuestion(state.currentQuestion);
+  }
+}
+
+function toggleMute() {
+  state.ttsEnabled = !state.ttsEnabled;
+  const btn = document.getElementById('ttsMuteBtn');
+  if (state.ttsEnabled) {
+    btn.textContent = '🔊 Auto-play on';
+    btn.className = 'tts-mute-btn';
+  } else {
+    stopTTS();
+    btn.textContent = '🔇 Auto-play off';
+    btn.className = 'tts-mute-btn muted';
+  }
+}
+
+function updateTTSSpeed(val) {
+  state.ttsRate = parseFloat(val);
+}
+
+function updateTTSVoice(val) {
+  const voices = window.speechSynthesis.getVoices();
+  state.ttsVoice = voices.find(v => v.name === val) || null;
+}
+
+function loadTTSVoices() {
+  if (!window.speechSynthesis) return;
+  const populate = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const sel = document.getElementById('ttsVoice');
+    if (!sel || !voices.length) return;
+    // Prefer English voices
+    const engVoices = voices.filter(v => v.lang.startsWith('en'));
+    const list = engVoices.length ? engVoices : voices;
+    sel.innerHTML = list.map(v =>
+      `<option value="${v.name}" ${v.default ? 'selected' : ''}>${v.name.replace('Microsoft ', '').replace(' - English (United States)', '')}</option>`
+    ).join('');
+    // Default to first English voice
+    if (list.length) state.ttsVoice = list.find(v => v.default) || list[0];
+  };
+  populate();
+  window.speechSynthesis.onvoiceschanged = populate;
+}
+
+// ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
-  // Render history badge if entries exist
-  try {
-    const h = JSON.parse(localStorage.getItem('interviux_history') || '[]');
-    if (h.length) {
-      const badge = document.getElementById('jobsBadge');
-      // no badge for history
-    }
-  } catch (_) {}
+  loadTTSVoices();
 });
 </script>
 </body>
