@@ -201,6 +201,7 @@ input[type=file]{display:none}
 .action-item{display:flex;gap:.75rem;padding:.65rem 0;border-bottom:1px solid var(--border);font-size:.85rem;color:var(--text2);line-height:1.5}
 .action-item:last-child{border-bottom:none}
 .action-num{color:var(--purple);font-family:var(--mono);font-weight:700;min-width:1.5rem}
+@media(max-width:600px){#jobsGrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -340,7 +341,7 @@ input[type=file]{display:none}
 
         <!-- Answer Section -->
         <div class="answer-area" id="answerArea" style="display:none">
-          <textarea class="answer-textarea" id="answerInput" placeholder="Type your answer here... (or use the mic button to record)"></textarea>
+          <textarea class="answer-textarea" id="answerInput" placeholder="Type your answer here... (or use the mic button to record)" oninput="this.dataset.userTyped='1'"></textarea>
 
           <div class="answer-controls">
             <button class="btn" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
@@ -394,6 +395,39 @@ input[type=file]{display:none}
           <div class="audio-stat">
             <span>Filler words: <span id="fillerCount" style="color:var(--yellow)">0</span></span>
             <span>Pace: <span id="paceLabel" style="color:var(--green)">—</span></span>
+          </div>
+          <!-- Enhanced Audio Metrics -->
+          <div id="audioMetricsPanel" style="margin-top:.6rem;display:none">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem">
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.45rem .6rem;text-align:center">
+                <div style="font-size:.88rem;font-weight:700;font-family:var(--mono);color:var(--purple2)" id="toneLabel">—</div>
+                <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin-top:1px">Tone</div>
+              </div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.45rem .6rem;text-align:center">
+                <div style="font-size:.88rem;font-weight:700;font-family:var(--mono);color:var(--blue)" id="pitchLabel">—</div>
+                <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin-top:1px">Pitch</div>
+              </div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.45rem .6rem;text-align:center">
+                <div style="font-size:.88rem;font-weight:700;font-family:var(--mono);color:var(--yellow)" id="pauseLabel">0</div>
+                <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin-top:1px">Pauses</div>
+              </div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:.45rem .6rem;text-align:center">
+                <div style="font-size:.88rem;font-weight:700;font-family:var(--mono);color:var(--green)" id="confidenceAudioLabel">—</div>
+                <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);margin-top:1px">Confidence</div>
+              </div>
+            </div>
+            <!-- Pitch variance bar -->
+            <div style="margin-top:.5rem">
+              <div style="display:flex;justify-content:space-between;font-size:.6rem;font-family:var(--mono);color:var(--muted);margin-bottom:2px">
+                <span>Pitch Variation</span><span id="pitchVarPct">0%</span>
+              </div>
+              <div style="background:var(--surface2);border-radius:3px;height:4px;overflow:hidden">
+                <div id="pitchVarBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--purple),var(--blue));border-radius:3px;transition:width .4s"></div>
+              </div>
+            </div>
+          </div>
+          <div id="micPermissionWarning" style="display:none;font-size:.68rem;color:var(--yellow);font-family:var(--mono);margin-top:.5rem;line-height:1.5">
+            ⚠ Mic access needed. Click the 🎙 button and allow microphone in browser.
           </div>
         </div>
 
@@ -475,7 +509,6 @@ input[type=file]{display:none}
   </div>
 
   <div id="jobsGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem"></div>
-  @media(max-width:600px){#jobsGrid{grid-template-columns:1fr}}
 
   <div id="jobsFooter" style="display:none;margin-top:1.5rem;text-align:center">
     <div class="text-muted mb-1">Job data is AI-generated based on your resume profile and current market patterns.</div>
@@ -519,6 +552,7 @@ let state = {
   confScores: [],
   // audio
   mediaRecorder: null,
+  micStream: null,
   recognition: null,
   isRecording: false,
   recInterval: null,
@@ -527,6 +561,8 @@ let state = {
   fillerCount: 0,
   wordCount: 0,
   startRecTime: 0,
+  audioConfidenceScore: null,
+  _recognitionRestartTimeout: null,
   // visual
   cameraOn: false,
   stream: null,
@@ -738,11 +774,29 @@ async function fetchNextQuestion() {
   document.getElementById('feedbackContainer').innerHTML = '';
   document.getElementById('nextBtn').style.display = 'none';
   document.getElementById('answerInput').value = '';
+  document.getElementById('answerInput').dataset.userTyped = '';
   document.getElementById('transcriptBox').className = 'transcript-box';
   document.getElementById('transcriptText').textContent = '';
   state.transcript = ''; state.fillerCount = 0; state.wordCount = 0;
+  state.audioConfidenceScore = null;
   document.getElementById('fillerCount').textContent = '0';
   document.getElementById('paceLabel').textContent = '—';
+  // Reset audio metrics panel
+  const mp = document.getElementById('audioMetricsPanel');
+  if (mp) mp.style.display = 'none';
+  ['toneLabel','pitchLabel','confidenceAudioLabel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = '—'; el.style.color = 'var(--muted)'; }
+  });
+  const pauseEl = document.getElementById('pauseLabel');
+  if (pauseEl) pauseEl.textContent = '0';
+  const bar = document.getElementById('pitchVarBar');
+  if (bar) bar.style.width = '0%';
+  const pct = document.getElementById('pitchVarPct');
+  if (pct) pct.textContent = '0%';
+  // Reset viz
+  const viz = document.getElementById('audioViz');
+  if (viz) viz.innerHTML = '<div class="text-muted" style="font-size:.72rem">Start recording to see live audio</div>';
 
   try {
     const res = await fetch('/generate-question', {
@@ -807,7 +861,9 @@ async function submitAnswer() {
           answer_text: finalAnswer,
           duration_seconds: state.recSeconds || 0,
           filler_count: state.fillerCount,
-          word_count: state.transcript ? state.transcript.split(/\s+/).filter(Boolean).length : finalAnswer.split(/\s+/).length
+          word_count: state.transcript ? state.transcript.split(/\s+/).filter(Boolean).length : finalAnswer.split(/\s+/).length,
+          audio_confidence: state.audioConfidenceScore || null,
+          pause_count: pauseCount || 0
         })
       })
     ]);
@@ -903,9 +959,17 @@ function renderFeedback(answer, ev, comm, visualScore) {
     </div>
 
     ${comm.communication_feedback ? `<div class="feedback-section">
-      <div class="feedback-label">Communication Feedback</div>
+      <div class="feedback-label">Communication & Audio Intelligence</div>
       <div style="font-size:.87rem;color:var(--text2);line-height:1.7">${comm.communication_feedback}</div>
-      ${comm.words_per_minute > 0 ? `<div class="mt-1 text-muted">Speaking pace: ${comm.words_per_minute} WPM · Filler words: ${comm.filler_count} · ${comm.pace}</div>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.65rem">
+        ${comm.words_per_minute > 0 ? `<span class="pill blue">🎙 ${comm.words_per_minute} WPM · ${comm.pace}</span>` : ''}
+        ${(comm.filler_count > 0) ? `<span class="pill yellow">Fillers: ${comm.filler_count}</span>` : '<span class="pill green">No fillers ✓</span>'}
+        ${comm.overall_communication ? `<span class="pill ${comm.overall_communication === 'Excellent' ? 'green' : comm.overall_communication === 'Good' ? 'blue' : comm.overall_communication === 'Fair' ? 'yellow' : 'red'}">${comm.overall_communication}</span>` : ''}
+        ${state.audioConfidenceScore ? `<span class="pill purple">Audio Confidence: ${state.audioConfidenceScore}/10</span>` : ''}
+      </div>
+      ${comm.improvements?.length ? `<div style="margin-top:.5rem;font-size:.78rem;color:var(--muted)">
+        ${comm.improvements.map(i => `<div style="margin-bottom:2px">→ ${i}</div>`).join('')}
+      </div>` : ''}
     </div>` : ''}
 
     <div class="feedback-section" style="background:rgba(124,92,252,.04)">
@@ -1053,105 +1117,418 @@ async function fetchAIReport(avgTech, avgComm, avgConf) {
 }
 
 // ═══════════════════════════════════════════════════════
-// MIC / AUDIO RECORDING
+// MIC / AUDIO RECORDING  (Speech-to-Text + Audio Intelligence)
 // ═══════════════════════════════════════════════════════
 const FILLER_WORDS = ['um', 'uh', 'like', 'you know', 'basically', 'literally', 'sort of', 'kind of', 'i mean', 'actually', 'right', 'okay so'];
+
+// Audio analysis state
+let audioCtx = null;
+let analyserNode = null;
+let audioSourceNode = null;
+let audioAnimFrame = null;
+let pitchHistory = [];
+let silenceFrames = 0;
+let pauseCount = 0;
+let lastSpeechTime = 0;
+let volumeHistory = [];
 
 function toggleMic() {
   if (state.isRecording) stopMic();
   else startMic();
 }
 
-function startMic() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    alert('Speech recognition not supported in this browser. Use Chrome or Edge.');
+async function startMic() {
+  // Hide any previous warning
+  const warn = document.getElementById('micPermissionWarning');
+  if (warn) warn.style.display = 'none';
+
+  // Request microphone access first
+  let micStream;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (err) {
+    const warn = document.getElementById('micPermissionWarning');
+    if (warn) warn.style.display = 'block';
+    const label = document.getElementById('micLabel');
+    if (label) label.textContent = 'Mic denied';
     return;
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
+  // Set up Web Audio API for real-time analysis
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyserNode = audioCtx.createAnalyser();
+    analyserNode.fftSize = 2048;
+    analyserNode.smoothingTimeConstant = 0.8;
+    audioSourceNode = audioCtx.createMediaStreamSource(micStream);
+    audioSourceNode.connect(analyserNode);
+  } catch (_) { /* Audio analysis optional */ }
 
+  // Set up Speech Recognition
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    // No STT available — still do audio analysis only
+    console.warn('Speech recognition not available. Audio analysis only.');
+  }
+
+  // Reset state
   state.transcript = '';
   state.fillerCount = 0;
   state.recSeconds = 0;
   state.startRecTime = Date.now();
   state.isRecording = true;
+  state.micStream = micStream;
+  pitchHistory = [];
+  volumeHistory = [];
+  silenceFrames = 0;
+  pauseCount = 0;
+  lastSpeechTime = Date.now();
 
+  // Update UI
   const micBtn = document.getElementById('micBtn');
   const micLabel = document.getElementById('micLabel');
   micBtn.className = 'mic-btn recording';
   micLabel.textContent = 'Recording...';
   document.getElementById('recordingTimer').style.display = 'flex';
   document.getElementById('transcriptBox').className = 'transcript-box active';
+  const metricsPanel = document.getElementById('audioMetricsPanel');
+  if (metricsPanel) metricsPanel.style.display = 'block';
 
+  // Timer + audio viz loop
   state.recInterval = setInterval(() => {
     state.recSeconds = Math.round((Date.now() - state.startRecTime) / 1000);
     document.getElementById('recSeconds').textContent = state.recSeconds;
-    renderAudioViz();
   }, 500);
+
+  // Start real-time audio analysis loop
+  startAudioAnalysisLoop();
+
+  // Start Speech Recognition
+  if (SpeechRecognition) {
+    startSpeechRecognition(micStream);
+  }
+}
+
+function startSpeechRecognition(micStream) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.maxAlternatives = 1;
+
+  let restartTimeout = null;
+  let stopped = false;
+
+  recognition.onstart = () => {
+    stopped = false;
+  };
 
   recognition.onresult = (e) => {
     let interim = '';
     let final = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-      else interim += e.results[i][0].transcript;
+      if (e.results[i].isFinal) {
+        final += e.results[i][0].transcript + ' ';
+        lastSpeechTime = Date.now(); // track speech activity
+      } else {
+        interim += e.results[i][0].transcript;
+      }
     }
     if (final) {
       state.transcript += final;
-      // Count fillers
       const lowerFinal = final.toLowerCase();
       FILLER_WORDS.forEach(fw => {
-        const matches = lowerFinal.match(new RegExp('\\b' + fw + '\\b', 'g'));
+        const matches = lowerFinal.match(new RegExp('\\b' + fw.replace(/\s/g,'\\s+') + '\\b', 'g'));
         if (matches) state.fillerCount += matches.length;
       });
       state.wordCount = state.transcript.split(/\s+/).filter(Boolean).length;
       document.getElementById('fillerCount').textContent = state.fillerCount;
-      // Pace
-      const wpm = state.recSeconds > 0 ? Math.round((state.wordCount / state.recSeconds) * 60) : 0;
+      const wpm = state.recSeconds > 5 ? Math.round((state.wordCount / state.recSeconds) * 60) : 0;
       const pace = wpm === 0 ? '—' : wpm < 100 ? 'Too slow' : wpm > 175 ? 'Too fast' : 'Good';
       document.getElementById('paceLabel').textContent = pace;
-      document.getElementById('paceLabel').style.color = pace === 'Good' ? 'var(--green)' : 'var(--yellow)';
+      document.getElementById('paceLabel').style.color = pace === 'Good' ? 'var(--green)' : pace === '—' ? 'var(--muted)' : 'var(--yellow)';
     }
-    document.getElementById('transcriptText').textContent = state.transcript + interim;
-    // Mirror to textarea if empty
-    if (!document.getElementById('answerInput').value.trim()) {
-      document.getElementById('answerInput').value = state.transcript + interim;
+    const displayText = state.transcript + (interim ? '<em style="color:var(--muted)">' + interim + '</em>' : '');
+    document.getElementById('transcriptText').innerHTML = displayText;
+    // Mirror to textarea only if user hasn't typed
+    const ta = document.getElementById('answerInput');
+    if (ta && !ta.dataset.userTyped) {
+      ta.value = state.transcript + interim;
     }
   };
 
-  recognition.onerror = () => { stopMic(); };
-  recognition.onend = () => { if (state.isRecording) recognition.start(); };
-  recognition.start();
+  recognition.onerror = (e) => {
+    // 'no-speech' and 'aborted' are normal — restart silently
+    if (!state.isRecording) return;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      stopMic();
+      const warn = document.getElementById('micPermissionWarning');
+      if (warn) warn.style.display = 'block';
+      return;
+    }
+    // For other errors, attempt restart after short delay
+    if (!stopped) {
+      stopped = true;
+      restartTimeout = setTimeout(() => {
+        if (state.isRecording) {
+          try { recognition.start(); stopped = false; } catch (_) {}
+        }
+      }, 300);
+    }
+  };
+
+  recognition.onend = () => {
+    if (!state.isRecording) return;
+    if (!stopped) {
+      stopped = true;
+      restartTimeout = setTimeout(() => {
+        if (state.isRecording) {
+          try { recognition.start(); stopped = false; } catch (_) {}
+        }
+      }, 100);
+    }
+  };
+
+  try {
+    recognition.start();
+  } catch (err) {
+    console.warn('Recognition start failed:', err);
+  }
+
   state.recognition = recognition;
+  state._recognitionRestartTimeout = restartTimeout;
+}
+
+function startAudioAnalysisLoop() {
+  if (!analyserNode) {
+    // Fallback animated viz if no audio context
+    audioAnimFrame = requestAnimationFrame(function loop() {
+      if (!state.isRecording) return;
+      renderAudioVizFallback();
+      audioAnimFrame = requestAnimationFrame(loop);
+    });
+    return;
+  }
+
+  const bufferLength = analyserNode.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  const freqArray = new Uint8Array(bufferLength);
+
+  function loop() {
+    if (!state.isRecording) return;
+    audioAnimFrame = requestAnimationFrame(loop);
+
+    analyserNode.getByteTimeDomainData(dataArray);
+    analyserNode.getByteFrequencyData(freqArray);
+
+    // === Volume (RMS) ===
+    let sumSq = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      const v = (dataArray[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / bufferLength);
+    volumeHistory.push(rms);
+    if (volumeHistory.length > 60) volumeHistory.shift();
+
+    // === Pitch estimation (autocorrelation) ===
+    const pitch = estimatePitch(dataArray, audioCtx.sampleRate);
+    if (pitch > 80 && pitch < 400) {
+      pitchHistory.push(pitch);
+      if (pitchHistory.length > 120) pitchHistory.shift();
+      lastSpeechTime = Date.now();
+      silenceFrames = 0;
+    } else {
+      silenceFrames++;
+      // Detect pause: > 1.5s of silence after speech started
+      if (silenceFrames > 45 && state.recSeconds > 3) {
+        const timeSinceSpeech = Date.now() - lastSpeechTime;
+        if (timeSinceSpeech > 1500 && timeSinceSpeech < 1600) {
+          pauseCount++;
+        }
+      }
+    }
+
+    // === Render waveform viz ===
+    renderAudioVizWaveform(dataArray, rms);
+
+    // === Update audio intelligence metrics ===
+    updateAudioMetrics(rms, pitch);
+  }
+
+  audioAnimFrame = requestAnimationFrame(loop);
+}
+
+function estimatePitch(buffer, sampleRate) {
+  // Simple autocorrelation pitch detection
+  const SIZE = buffer.length;
+  const correlations = new Array(SIZE).fill(0);
+  for (let lag = 0; lag < SIZE; lag++) {
+    for (let i = 0; i < SIZE - lag; i++) {
+      correlations[lag] += ((buffer[i] - 128) / 128) * ((buffer[i + lag] - 128) / 128);
+    }
+  }
+  // Find first peak after initial dip
+  let d = 0;
+  while (d < SIZE && correlations[d] > correlations[d + 1]) d++;
+  let maxVal = -Infinity, maxLag = -1;
+  for (let i = d; i < SIZE; i++) {
+    if (correlations[i] > maxVal) { maxVal = correlations[i]; maxLag = i; }
+  }
+  if (maxLag === -1 || correlations[0] === 0) return -1;
+  if (maxVal / correlations[0] < 0.01) return -1; // not confident enough
+  return sampleRate / maxLag;
+}
+
+function updateAudioMetrics(rms, pitch) {
+  if (!state.isRecording) return;
+
+  // --- Tone analysis from volume dynamics ---
+  let toneLabel = '—';
+  let toneColor = 'var(--muted)';
+  if (state.recSeconds > 3 && volumeHistory.length > 10) {
+    const avgVol = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+    const recent = volumeHistory.slice(-10);
+    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
+    if (avgVol < 0.02) { toneLabel = 'Quiet'; toneColor = 'var(--yellow)'; }
+    else if (recentAvg > avgVol * 1.3) { toneLabel = 'Confident'; toneColor = 'var(--green)'; }
+    else if (recentAvg < avgVol * 0.6) { toneLabel = 'Trailing'; toneColor = 'var(--yellow)'; }
+    else { toneLabel = 'Steady'; toneColor = 'var(--blue)'; }
+  }
+  const toneEl = document.getElementById('toneLabel');
+  if (toneEl) { toneEl.textContent = toneLabel; toneEl.style.color = toneColor; }
+
+  // --- Pitch label ---
+  let pitchLbl = '—'; let pitchColor = 'var(--muted)';
+  if (pitchHistory.length > 5) {
+    const avgPitch = pitchHistory.reduce((a, b) => a + b, 0) / pitchHistory.length;
+    if (avgPitch < 130) { pitchLbl = 'Deep'; pitchColor = 'var(--blue)'; }
+    else if (avgPitch < 180) { pitchLbl = 'Mid'; pitchColor = 'var(--purple2)'; }
+    else if (avgPitch < 250) { pitchLbl = 'High'; pitchColor = 'var(--yellow)'; }
+    else { pitchLbl = 'Very High'; pitchColor = 'var(--red)'; }
+  }
+  const pitchEl = document.getElementById('pitchLabel');
+  if (pitchEl) { pitchEl.textContent = pitchLbl; pitchEl.style.color = pitchColor; }
+
+  // --- Pitch variation (engagement/expressiveness) ---
+  if (pitchHistory.length > 10) {
+    const mean = pitchHistory.reduce((a, b) => a + b, 0) / pitchHistory.length;
+    const variance = pitchHistory.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / pitchHistory.length;
+    const stdDev = Math.sqrt(variance);
+    const varPct = Math.min(100, Math.round((stdDev / mean) * 300)); // normalize
+    const bar = document.getElementById('pitchVarBar');
+    const pct = document.getElementById('pitchVarPct');
+    if (bar) bar.style.width = varPct + '%';
+    if (pct) pct.textContent = varPct + '%';
+  }
+
+  // --- Pause count ---
+  const pauseEl = document.getElementById('pauseLabel');
+  if (pauseEl) pauseEl.textContent = pauseCount;
+
+  // --- Confidence score from audio signals ---
+  let confScore = '—'; let confColor = 'var(--muted)';
+  if (state.recSeconds > 5) {
+    let score = 7; // base
+    const avgVol = volumeHistory.reduce((a, b) => a + b, 0) / (volumeHistory.length || 1);
+    if (avgVol < 0.015) score -= 2;     // too quiet
+    else if (avgVol > 0.08) score += 1; // strong voice
+    if (state.fillerCount > 5) score -= 1;
+    if (state.fillerCount > 10) score -= 1;
+    if (pauseCount > 4) score -= 1;
+    if (pitchHistory.length > 10) {
+      const mean = pitchHistory.reduce((a, b) => a + b, 0) / pitchHistory.length;
+      const stdDev = Math.sqrt(pitchHistory.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / pitchHistory.length);
+      if (stdDev / mean > 0.15) score += 1; // good variation = engaged
+    }
+    score = Math.max(1, Math.min(10, score));
+    confScore = score;
+    confColor = score >= 7 ? 'var(--green)' : score >= 5 ? 'var(--yellow)' : 'var(--red)';
+    state.audioConfidenceScore = score; // save for submission
+  }
+  const confEl = document.getElementById('confidenceAudioLabel');
+  if (confEl) { confEl.textContent = confScore; confEl.style.color = confColor; }
+}
+
+function renderAudioVizWaveform(dataArray, rms) {
+  const viz = document.getElementById('audioViz');
+  if (!viz) return;
+  const BARS = 24;
+  const step = Math.floor(dataArray.length / BARS);
+  let html = '';
+  for (let i = 0; i < BARS; i++) {
+    const val = dataArray[i * step] || 128;
+    const h = Math.max(3, Math.abs(val - 128) * 0.55 + rms * 80);
+    const opacity = 0.5 + (h / 32) * 0.5;
+    const color = h > 20 ? 'var(--purple2)' : 'var(--purple)';
+    html += `<div class="audio-bar" style="height:${Math.min(h, 30)}px;opacity:${opacity};background:${color}"></div>`;
+  }
+  viz.innerHTML = html;
+}
+
+function renderAudioVizFallback() {
+  const viz = document.getElementById('audioViz');
+  if (!viz) return;
+  const bars = 20;
+  viz.innerHTML = Array.from({ length: bars }, () => {
+    const h = Math.random() * 24 + 4;
+    return `<div class="audio-bar" style="height:${h}px;opacity:${0.4 + Math.random() * 0.6}"></div>`;
+  }).join('');
+}
+
+function renderAudioViz() {
+  renderAudioVizFallback();
 }
 
 function stopMic() {
   state.isRecording = false;
-  if (state.recognition) { try { state.recognition.stop(); } catch (_) {} state.recognition = null; }
+
+  // Stop recognition
+  if (state.recognition) {
+    try { state.recognition.stop(); } catch (_) {}
+    state.recognition = null;
+  }
+  if (state._recognitionRestartTimeout) {
+    clearTimeout(state._recognitionRestartTimeout);
+    state._recognitionRestartTimeout = null;
+  }
+
+  // Stop mic stream tracks
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(t => t.stop());
+    state.micStream = null;
+  }
+
+  // Close audio context
+  if (audioCtx) {
+    try { audioCtx.close(); } catch (_) {}
+    audioCtx = null; analyserNode = null; audioSourceNode = null;
+  }
+
+  // Cancel animation frame
+  if (audioAnimFrame) { cancelAnimationFrame(audioAnimFrame); audioAnimFrame = null; }
+
+  // Stop timer
   if (state.recInterval) { clearInterval(state.recInterval); state.recInterval = null; }
+
+  // Reset UI
   const micBtn = document.getElementById('micBtn');
   if (micBtn) {
     micBtn.className = 'mic-btn';
     document.getElementById('micLabel').textContent = 'Record Answer';
     document.getElementById('recordingTimer').style.display = 'none';
   }
+
+  // Reset viz to static
+  const viz = document.getElementById('audioViz');
+  if (viz && state.transcript === '' && !state.wordCount) {
+    viz.innerHTML = '<div class="text-muted" style="font-size:.72rem">Recording stopped</div>';
+  }
+
   // Ensure textarea has transcript
   const ta = document.getElementById('answerInput');
   if (ta && !ta.value.trim() && state.transcript) ta.value = state.transcript;
-}
-
-function renderAudioViz() {
-  const viz = document.getElementById('audioViz');
-  if (!state.isRecording) return;
-  const bars = 20;
-  viz.innerHTML = Array.from({ length: bars }, (_, i) => {
-    const h = Math.random() * 24 + 4;
-    return `<div class="audio-bar" style="height:${h}px;opacity:${0.4 + Math.random() * 0.6}"></div>`;
-  }).join('');
 }
 
 // ═══════════════════════════════════════════════════════
