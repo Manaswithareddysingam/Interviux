@@ -1182,15 +1182,20 @@ function stopMic() {
   state.isRecording = false;
   if (state.recognition) { try { state.recognition.stop(); } catch (_) {} state.recognition = null; }
   if (state.recInterval) { clearInterval(state.recInterval); state.recInterval = null; }
+
+  // Save whatever is visible in the textarea (includes interim words not yet finalized by browser)
+  // This is the key fix: interim results show in textarea but aren't in state.transcript yet
+  const ta = document.getElementById('answerInput');
+  if (ta && ta.value.trim()) {
+    state.transcript = ta.value.trim();
+  }
+
   const micBtn = document.getElementById('micBtn');
   if (micBtn) {
     micBtn.className = 'mic-btn';
     document.getElementById('micLabel').textContent = 'Record Answer';
     document.getElementById('recordingTimer').style.display = 'none';
   }
-  // Ensure textarea has transcript
-  const ta = document.getElementById('answerInput');
-  if (ta && !ta.value.trim() && state.transcript) ta.value = state.transcript;
 }
 
 function renderAudioViz() {
