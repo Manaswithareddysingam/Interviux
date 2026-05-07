@@ -21,7 +21,7 @@ async function groqChat(messages, opts = {}) {
       'Authorization': `Bearer ${process.env.GROK_API_KEY}`
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: opts.model || 'llama-3.3-70b-versatile',
       messages,
       temperature: opts.temperature ?? 0.3,
       max_tokens: opts.max_tokens ?? 1200
@@ -97,16 +97,16 @@ app.post('/job-recommendations', async (req, res) => {
 
     const content = await groqChat([{
       role: 'user',
-      content: `You are a job market intelligence system. Generate realistic, currently-available job recommendations for this candidate.
+      content: `You are a job market intelligence system. Generate realistic job recommendations for this candidate.
 
 Candidate Profile:
 - Target Roles: ${(roles || []).join(', ')}
-- Key Skills: ${(skills || []).slice(0, 8).join(', ')}
+- Key Skills: ${(skills || []).slice(0, 6).join(', ')}
 - Seniority: ${seniority || 'Mid'}
 - Domain: ${domain || 'Backend'}
 - Years of Experience: ${years_experience || 2}
 
-Generate exactly 6 realistic job postings that this candidate can realistically apply for RIGHT NOW. Use real company names.
+Generate exactly 4 realistic job postings. Use real company names.
 
 Respond ONLY in valid JSON:
 {
@@ -119,8 +119,8 @@ Respond ONLY in valid JSON:
       "location": "San Francisco, CA (Hybrid)",
       "salary_range": "$160K - $220K",
       "match_score": 92,
-      "why_it_fits": "Your Python and distributed systems experience aligns perfectly with Stripe's payments infrastructure team",
-      "required_skills": ["Python", "Go", "PostgreSQL", "Kubernetes"],
+      "why_it_fits": "Strong Python and distributed systems fit for Stripe's payments team",
+      "required_skills": ["Python", "Go", "PostgreSQL"],
       "missing_skills": ["Go"],
       "job_type": "Full-time",
       "experience_required": "4-6 years",
@@ -131,14 +131,8 @@ Respond ONLY in valid JSON:
   ]
 }
 
-Requirements:
-- Use real companies: Google, Meta, Stripe, Uber, Airbnb, Netflix, Databricks, Figma, Notion, Linear, Vercel, Shopify, etc.
-- Match the seniority level in job title and requirements
-- Salary ranges should be realistic for 2025
-- match_score should reflect genuine skill alignment (60-95 range)
-- Sort by match_score descending
-- company_logo_color should be the brand's primary color hex code`
-    }], { temperature: 0.6, max_tokens: 2500 });
+Rules: real companies (Google, Meta, Stripe, Uber, Airbnb, Netflix, Figma, Notion, Vercel, Shopify etc.), match seniority, realistic 2025 salaries, match_score 60-95, sort by match_score desc, company_logo_color as brand hex.`
+    }], { model: 'llama-3.1-8b-instant', temperature: 0.6, max_tokens: 1200 });
 
     const result = parseJSON(content);
     res.json({ success: true, jobs: result.jobs || [] });
@@ -237,7 +231,7 @@ Respond ONLY in valid JSON:
 // ── COMMUNICATION ANALYSIS ────────────────────────────────
 app.post('/analyze-communication', async (req, res) => {
   try {
-    const { transcript, answer_text, duration_seconds, filler_count, word_count } = req.body;
+    const { transcript, answer_text, duration_seconds, filler_count, word_count, audio_confidence, pause_count } = req.body;
 
     const text = transcript || answer_text || '';
 
@@ -245,7 +239,7 @@ app.post('/analyze-communication', async (req, res) => {
       return res.json({
         success: true,
         analysis: {
-          confidence_score: 5,
+          confidence_score: audio_confidence || 5,
           clarity_score: 5,
           communication_feedback: 'No audio transcript available. Score based on text answer.',
           strengths: [],
@@ -258,16 +252,20 @@ app.post('/analyze-communication', async (req, res) => {
     const wpm = duration_seconds > 0 ? Math.round((word_count / duration_seconds) * 60) : 0;
     const paceLabel = wpm === 0 ? 'Unknown' : wpm < 100 ? 'Too slow' : wpm > 175 ? 'Too fast' : 'Good pace';
 
+    const audioContext = audio_confidence !== null && audio_confidence !== undefined
+      ? `\nAudio Intelligence Signals:\n- Detected audio confidence score: ${audio_confidence}/10\n- Detected pause count: ${pause_count || 0}\n- Speaking pace: ${wpm > 0 ? wpm + ' WPM (' + paceLabel + ')' : 'unknown'}`
+      : `\nSpeaking pace: ${wpm > 0 ? wpm + ' WPM (' + paceLabel + ')' : 'unknown'}`;
+
     const content = await groqChat([{
       role: 'user',
       content: `Analyze this interview answer transcript for communication and confidence quality.
 
 Transcript: "${text}"
 Filler words detected: ${filler_count || 0}
-Speaking pace: ${wpm > 0 ? wpm + ' WPM (' + paceLabel + ')' : 'unknown'}
-Answer length: ${word_count || 0} words
+Answer length: ${word_count || 0} words${audioContext}
 
-Evaluate communication quality and respond ONLY in valid JSON:
+Evaluate communication quality. If audio_confidence is provided, weight it heavily in your confidence_score.
+Respond ONLY in valid JSON:
 {
   "confidence_score": 7,
   "clarity_score": 6,
@@ -279,6 +277,10 @@ Evaluate communication quality and respond ONLY in valid JSON:
     }], { temperature: 0.3, max_tokens: 600 });
 
     const llmResult = parseJSON(content);
+    // If audio_confidence was measured, blend it with LLM score
+    if (audio_confidence !== null && audio_confidence !== undefined) {
+      llmResult.confidence_score = Math.round((llmResult.confidence_score + audio_confidence) / 2 * 10) / 10;
+    }
     res.json({
       success: true,
       analysis: {
