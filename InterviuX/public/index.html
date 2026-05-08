@@ -1428,6 +1428,7 @@
 
             <div class="answer-controls">
               <button class="btn" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
+              <button class="btn ghost" id="skipBtn" onclick="skipQuestion()">Skip Question</button>
               <button class="mic-btn" id="micBtn" onclick="toggleMic()">
                 🎙 <span id="micLabel">Record Answer</span>
               </button>
@@ -1560,6 +1561,11 @@
           </div>
         </div>
 
+        <div class="card mb-2" id="conceptReportCard" style="display:none">
+          <div class="section-label">Concept-wise Analysis</div>
+          <div id="conceptBreakdown"></div>
+        </div>
+
         <div class="card mb-2">
           <div class="section-label">Question Breakdown</div>
           <div id="questionBreakdown"></div>
@@ -1642,6 +1648,7 @@
       pastQuestions: [],
       lastScore: null,
       currentQuestion: '',
+      currentConcept: '',
       questionCount: 0,
       maxQuestions: 10,
       questionType: 'technical',
@@ -1945,6 +1952,7 @@
         if (!data.success) throw new Error(data.error);
 
         state.currentQuestion = data.question;
+        state.currentConcept = data.concept || 'General';
         state.currentQuestionType = targetType;
         if (!isRegenerate) {
           state.questionCount++;
@@ -2128,7 +2136,8 @@
           q: state.currentQuestion,
           score: ev.score,
           comm: comm.confidence_score || null,
-          conf: visualScore
+          conf: visualScore,
+          concept: state.currentConcept || ev.primary_concept || 'General'
         });
 
         renderFeedback(finalAnswer, ev, comm, visualScore, curPitchVar, curHesitation);
@@ -2256,6 +2265,61 @@
       document.getElementById('runConf').textContent = confAvg;
     }
 
+    async function skipQuestion() {
+      if (!state.currentQuestion) return;
+      stopMic();
+      stopTTS();
+
+      state.lastScore = 0;
+      state.techScores.push(0);
+      state.commScores.push(0);
+      
+      // Check for visual readings (confidence)
+      let visualScore = 0;
+      if (state.visualReadings.length > 0) {
+        visualScore = Math.round(state.visualReadings.reduce((a, b) => a + b, 0) / state.visualReadings.length * 10) / 10;
+      }
+      state.confScores.push(visualScore);
+
+      state.pastQuestions.push(state.currentQuestion);
+      state.allScores.push({
+        q: state.currentQuestion,
+        score: 0,
+        comm: 0,
+        conf: visualScore,
+        skipped: true,
+        concept: state.currentConcept || 'General'
+      });
+
+      updateCumulativeScores();
+
+      document.getElementById('answerInput').value = '';
+      updateWordCount();
+      document.getElementById('answerArea').style.display = 'none';
+
+      document.getElementById('feedbackContainer').innerHTML = `
+        <div class="feedback-card fade-in" style="border-left: 4px solid var(--red)">
+          <div class="feedback-section">
+            <div class="feedback-label">Question Skipped</div>
+            <div style="color:var(--text);line-height:1.7;font-weight:600">
+              You skipped this question.
+            </div>
+            <div style="color:var(--red);font-size:0.85rem;margin-top:0.5rem">
+              Score: 0/10 (Marked as incorrect/unknown)
+            </div>
+          </div>
+        </div>
+      `;
+
+      if (state.questionCount < state.maxQuestions) {
+        document.getElementById('nextBtn').style.display = 'inline-flex';
+      } else {
+        document.getElementById('nextBtn').style.display = 'none';
+        document.getElementById('questionText').textContent = '✅ Interview Complete!';
+        await showSessionSummary();
+      }
+    }
+
     function nextQuestion() {
       fetchNextQuestion();
     }
@@ -2271,6 +2335,48 @@
     // ═══════════════════════════════════════════════════════
     // SESSION SUMMARY
     // ═══════════════════════════════════════════════════════
+    function renderConceptReport() {
+      if (state.allScores.length === 0) return;
+      
+      const concepts = {};
+      state.allScores.forEach(item => {
+        const c = item.concept || 'General';
+        if (!concepts[c]) concepts[c] = { scores: [], count: 0 };
+        concepts[c].scores.push(item.score);
+        concepts[c].count++;
+      });
+
+      const reportEl = document.getElementById('conceptBreakdown');
+      const cardEl = document.getElementById('conceptReportCard');
+      reportEl.innerHTML = '';
+      cardEl.style.display = 'block';
+
+      Object.keys(concepts).forEach(name => {
+        const data = concepts[name];
+        const avg = data.scores.reduce((a, b) => a + b, 0) / data.scores.length;
+        const color = avg >= 8 ? 'var(--green)' : avg >= 5 ? 'var(--yellow)' : 'var(--red)';
+        const pct = (avg / 10) * 100;
+        
+        const status = avg >= 8 ? 'Expert' : avg >= 6 ? 'Proficient' : avg >= 4 ? 'Needs Practice' : 'Critical Gap';
+        
+        reportEl.innerHTML += `
+          <div style="margin-bottom:1.25rem">
+            <div style="display:flex;justify-content:space-between;margin-bottom:.4rem;align-items:center">
+              <span style="font-weight:600;font-size:.9rem;color:var(--text)">${name}</span>
+              <div style="text-align:right">
+                <span style="font-size:.7rem;font-family:var(--mono);color:${color};text-transform:uppercase;letter-spacing:1px">${status}</span>
+                <span style="display:block;font-size:.85rem;font-weight:700;color:${color}">${avg.toFixed(1)}/10</span>
+              </div>
+            </div>
+            <div style="height:6px;background:var(--surface2);border-radius:10px;overflow:hidden;margin-bottom:.25rem">
+              <div style="height:100%;width:${pct}%;background:${color};border-radius:10px"></div>
+            </div>
+            <div style="font-size:.65rem;color:var(--muted);font-family:var(--mono)">Tested in ${data.count} question${data.count > 1 ? 's' : ''}</div>
+          </div>
+        `;
+      });
+    }
+
     async function showSessionSummary() {
       stopTTS(); stopCamera(); stopMic();
 
@@ -2293,6 +2399,9 @@
       document.getElementById('sumComm').textContent = avgComm ? avgComm.toFixed(1) : '—';
       document.getElementById('sumConf').textContent = avgConf ? avgConf.toFixed(1) : '—';
 
+      // Concept-wise report
+      renderConceptReport();
+
       // Question breakdown
       document.getElementById('questionBreakdown').innerHTML = state.allScores.map((item, i) => {
         const c = item.score >= 8 ? 'var(--green)' : item.score >= 5 ? 'var(--yellow)' : 'var(--red)';
@@ -2301,12 +2410,12 @@
         return `<div style="margin-bottom:1rem">
       <div style="display:flex;justify-content:space-between;margin-bottom:.35rem;gap:.5rem">
         <span style="font-size:.78rem;color:var(--text2);font-family:var(--mono);flex:1">Q${i + 1}: ${shortQ}</span>
-        <span style="font-size:.82rem;font-weight:600;color:${c};white-space:nowrap">${item.score}/10</span>
+        <span style="font-size:.82rem;font-weight:600;color:${c};white-space:nowrap">${item.score}/10 ${item.skipped ? '<span style="font-size:.65rem;color:var(--muted);margin-left:4px">(SKIPPED)</span>' : ''}</span>
       </div>
       <div style="height:4px;background:var(--surface2);border-radius:4px;overflow:hidden">
         <div style="height:100%;width:${pct}%;background:${c};border-radius:4px"></div>
       </div>
-      ${item.comm ? `<span style="font-size:.7rem;color:var(--blue);font-family:var(--mono)">comm: ${item.comm}/10</span>` : ''}
+      ${item.comm !== null ? `<span style="font-size:.7rem;color:var(--blue);font-family:var(--mono)">comm: ${item.comm}/10</span>` : ''}
       ${item.conf !== null && item.conf !== undefined ? `<span style="font-size:.7rem;color:var(--green);font-family:var(--mono);margin-left:.5rem">conf: ${item.conf}/10</span>` : ''}
     </div>`;
       }).join('');

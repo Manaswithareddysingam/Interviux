@@ -345,7 +345,7 @@ app.post('/generate-question', async (req, res) => {
       'coding': 'Ask about algorithmic thinking, data structures, or code reasoning (no actual code required, just approach).'
     }[questionType] || 'Ask a relevant technical question.';
 
-    const content = await groqChat([{
+    const result = await groqChatJSON([{
       role: 'user',
       content: `You are a senior technical interviewer at a top tech company interviewing for: ${role}
 This is question ${questionNum || 1} of ${totalQuestions || 5}.
@@ -358,10 +358,11 @@ Known candidate weaknesses to occasionally probe: ${(weaknesses || []).join(', '
 Previously asked questions — DO NOT repeat any of these:
 ${(pastQuestions || []).map((q, i) => `${i + 1}. ${q}`).join('\n')}
 
-Respond ONLY with the interview question. No prefixes, quotes, or formatting. The question should be specific, clear, interview-appropriate, and answerable within 500 words.`
-    }], { temperature: 0.75, max_tokens: 350 });
+Respond with ONLY a raw JSON object containing the question and the primary technical or behavioral concept being tested (e.g., "Dependency Injection", "Conflict Resolution", "CAP Theorem", "Recursion").
+Format: {"question": "...", "concept": "..."}`
+    }], { temperature: 0.75, max_tokens: 450 }, ['question', 'concept']);
 
-    res.json({ success: true, question: content.trim() });
+    res.json({ success: true, question: result.question, concept: result.concept });
   } catch (err) {
     console.error('Question error:', err.message);
     res.status(500).json({ error: 'Question generation failed: ' + err.message });
@@ -434,7 +435,8 @@ app.post('/evaluate-answer', async (req, res) => {
           keywords_hit: [],
           keywords_missed: ["(Candidate provided no technical content)"],
           depth_level: "None",
-          confidence_from_answer: "Low"
+          confidence_from_answer: "Low",
+          primary_concept: "N/A"
         }
       });
     }
@@ -469,7 +471,9 @@ Return ONLY raw JSON — no markdown, no prose. Start with { end with }:
 {"score":1,"feedback":"Strict technical assessment","ideal_answer":"What a perfect answer looks like","keywords_hit":["keyword1"],"keywords_missed":["concept1"],"depth_level":"None","confidence_from_answer":"Low"}
 
 depth_level must be one of: None, Surface, Moderate, Deep, Expert
-confidence_from_answer must be one of: Low, Medium, High`
+confidence_from_answer must be one of: Low, Medium, High
+
+In addition to the standard fields, include "primary_concept" which identifies the core concept the candidate's answer addressed (or failed to address).`
     }], { temperature: 0, max_tokens: 1500 }, ['score', 'feedback', 'ideal_answer']);
     res.json({ success: true, evaluation });
   } catch (err) {
