@@ -325,20 +325,14 @@ function hashColor(str) {
   return `hsl(${Math.abs(h) % 360}, 55%, 38%)`;
 }
 
-// ── RESUME ANALYSIS ──────────────────────────────────────
-app.post('/analyze', upload.single('resume'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+// ── SHARED RESUME ANALYSIS LOGIC ─────────────────────────
+async function analyzeResumeText(resumeText, res) {
+  if (!resumeText || resumeText.trim().length < 100)
+    return res.status(400).json({ error: 'Resume text is too short or empty. Please provide more content.' });
 
-    const pdfData = await pdfParse(req.file.buffer);
-    const resumeText = pdfData.text;
-
-    if (!resumeText || resumeText.length < 100)
-      return res.status(400).json({ error: 'Could not extract text from PDF.' });
-
-    const analysis = await groqChatJSON([{
-      role: 'user',
-      content: `You are an expert technical recruiter and career coach. Analyze this resume carefully.
+  const analysis = await groqChatJSON([{
+    role: 'user',
+    content: `You are an expert technical recruiter and career coach. Analyze this resume carefully.
 
 Return ONLY a raw JSON object — no markdown, no prose, no backticks. Start with { and end with }.
 
@@ -350,10 +344,37 @@ Domain must be one of: Backend, Frontend, Full-Stack, Data Science, ML/AI, DevOp
 
 Resume:
 ${resumeText.substring(0, 3000)}`
-    }], { temperature: 0.2, max_tokens: 900 }, ['suggested_roles', 'strengths', 'seniority']);
-    res.json({ success: true, analysis, resumeText: resumeText.substring(0, 3000) });
+  }], { temperature: 0.2, max_tokens: 900 }, ['suggested_roles', 'strengths', 'seniority']);
+  res.json({ success: true, analysis, resumeText: resumeText.substring(0, 3000) });
+}
+
+// ── RESUME ANALYSIS (PDF upload) ─────────────────────────
+app.post('/analyze', upload.single('resume'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const pdfData = await pdfParse(req.file.buffer);
+    const resumeText = pdfData.text;
+
+    if (!resumeText || resumeText.length < 100)
+      return res.status(400).json({ error: 'Could not extract text from PDF.' });
+
+    await analyzeResumeText(resumeText, res);
   } catch (err) {
     console.error('Analyze error:', err.message);
+    res.status(500).json({ error: 'Analysis failed: ' + err.message });
+  }
+});
+
+// ── RESUME ANALYSIS (plain text input) ───────────────────
+app.post('/analyze-text', async (req, res) => {
+  try {
+    const { resumeText } = req.body;
+    if (!resumeText || typeof resumeText !== 'string')
+      return res.status(400).json({ error: 'No resume text provided.' });
+    await analyzeResumeText(resumeText, res);
+  } catch (err) {
+    console.error('Analyze-text error:', err.message);
     res.status(500).json({ error: 'Analysis failed: ' + err.message });
   }
 });
@@ -454,7 +475,7 @@ app.post('/generate-question', async (req, res) => {
     }
 
     const typeGuide = {
-      'technical': 'Focus on core domain concepts, job-specific scenarios, and functional knowledge relevant to the candidate\\'s specific role.',
+      "technical": "Focus on core domain concepts, job-specific scenarios, and functional knowledge relevant to the candidate's specific role.",
       'behavioral': 'STRICTLY BEHAVIORAL: Ask a situational question using the STAR format. Start with "Tell me about a time..." or "Give me an example of when...". DO NOT ask technical or design questions.',
       'system_design': 'Ask a system design question ("Design a system that...", "How would you architect...")',
       'coding': 'Ask a specific, Leetcode-style algorithmic or data structure coding problem. The candidate is expected to write actual code to solve it. Provide a clear problem statement, EXACTLY 2 distinct sample input/output examples, and constraints. Use explicit line breaks to clearly separate the problem statement from the examples and constraints.'
