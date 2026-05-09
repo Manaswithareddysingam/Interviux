@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InterviuX — Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    :root {
+      --bg: #07071a;
+      --surface: rgba(15,15,40,0.88);
+      --purple: #8b5cf6;
+      --purple2: #a78bfa;
+      --teal: #06b6d4;
+      --teal2: #22d3ee;
+      --coral: #f97316;
+      --coral2: #fb923c;
+      --green2: #34d399;
+      --text: #f4f4ff;
+      --text2: #b0b0d8;
+      --muted: #5a5a90;
+      --grad-main: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+      --font: 'Syne', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(139,92,246,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,92,246,.035) 1px, transparent 1px);
+      background-size: 52px 52px;
+      pointer-events: none;
+    }
+
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(110px);
+      pointer-events: none;
+      animation: drift 14s ease-in-out infinite;
+    }
+    .orb1 {
+      width: 580px; height: 580px;
+      background: radial-gradient(circle, rgba(139,92,246,.22) 0%, transparent 70%);
+      top: -180px; left: -120px;
+    }
+    .orb2 {
+      width: 480px; height: 480px;
+      background: radial-gradient(circle, rgba(6,182,212,.18) 0%, transparent 70%);
+      bottom: -130px; right: -130px;
+      animation-delay: -6s;
+    }
+    .orb3 {
+      width: 360px; height: 360px;
+      background: radial-gradient(circle, rgba(249,115,22,.13) 0%, transparent 70%);
+      bottom: 15%; right: 30%;
+      animation-delay: -4s;
+    }
+
+    @keyframes drift {
+      0%, 100% { transform: translate(0,0) scale(1) }
+      33% { transform: translate(28px, 18px) scale(1.04) }
+      66% { transform: translate(-18px, 30px) scale(0.97) }
+    }
+
+    .login-card {
+      position: relative;
+      width: 100%;
+      max-width: 440px;
+      background: var(--surface);
+      backdrop-filter: blur(40px) saturate(200%);
+      border: 1px solid rgba(139,92,246,0.28);
+      border-radius: 30px;
+      padding: 3.25rem 2.75rem;
+      text-align: center;
+      box-shadow:
+        0 0 0 1px rgba(6,182,212,0.06) inset,
+        0 48px 96px rgba(0,0,0,0.65),
+        0 0 80px rgba(139,92,246,0.12);
+      animation: slideUp .6s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(60px) scale(0.95) }
+      to   { opacity: 1; transform: translateY(0) scale(1) }
+    }
+
+    .logo {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -2px;
+      margin-bottom: .5rem;
+      background: var(--grad-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .logo span { /* gradient covers entire logo */ }
+
+    .tagline {
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--muted);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 2.5rem;
+    }
+
+    .features {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      justify-content: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .feat-pill {
+      font-size: .68rem;
+      font-family: var(--mono);
+      font-weight: 500;
+      border-radius: 100px;
+      padding: .3rem .9rem;
+    }
+    .feat-pill:nth-child(1) { color: var(--purple2); background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); }
+    .feat-pill:nth-child(2) { color: var(--teal2);   background: rgba(6,182,212,0.1);   border: 1px solid rgba(6,182,212,0.22); }
+    .feat-pill:nth-child(3) { color: var(--coral2);  background: rgba(249,115,22,0.1);  border: 1px solid rgba(249,115,22,0.22); }
+    .feat-pill:nth-child(4) { color: var(--green2);  background: rgba(16,185,129,0.1);  border: 1px solid rgba(16,185,129,0.22); }
+    .feat-pill:nth-child(5) { color: #60a5fa;        background: rgba(59,130,246,0.1);  border: 1px solid rgba(59,130,246,0.22); }
+    .feat-pill:nth-child(6) { color: #fbbf24;        background: rgba(245,158,11,0.1);  border: 1px solid rgba(245,158,11,0.22); }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      color: var(--muted);
+      font-size: .75rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(139,92,246,0.35), transparent);
+    }
+
+    .google-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .75rem;
+      width: 100%;
+      padding: 1rem 1.5rem;
+      background: #fff;
+      color: #3c4043;
+      border: none;
+      border-radius: 16px;
+      font-family: var(--font);
+      font-size: .95rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all .25s;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+    }
+    .google-btn:hover {
+      background: #f9f9f9;
+      box-shadow: 0 10px 36px rgba(139,92,246,0.35), 0 4px 20px rgba(0,0,0,0.3);
+      transform: translateY(-2px) scale(1.01);
+    }
+    .google-btn:active { transform: translateY(0) scale(.99) }
+
+    .google-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
+    .terms {
+      margin-top: 1.5rem;
+      font-size: .7rem;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .scan-line {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: var(--grad-main);
+      top: 0;
+      border-radius: 30px 30px 0 0;
+      animation: scan 3.5s ease-in-out infinite;
+    }
+    @keyframes scan {
+      0%   { opacity: 0; transform: scaleX(0.05) }
+      50%  { opacity: 1; transform: scaleX(1) }
+      100% { opacity: 0; transform: scaleX(0.05) }
+    }
+  </style>
+</head>
+<body>
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+
+  <div class="login-card">
+    <div class="scan-line"></div>
+
+    <div class="logo">Interviu<span>X</span></div>
+    <div class="tagline">AI Mock Interview Platform</div>
+
+    <div class="features">
+      <span class="feat-pill">Resume Analysis</span>
+      <span class="feat-pill">Adaptive AI</span>
+      <span class="feat-pill">Audio Intel</span>
+      <span class="feat-pill">Visual Scoring</span>
+      <span class="feat-pill">Job Matching</span>
+      <span class="feat-pill">Coaching Report</span>
+    </div>
+
+    <div class="divider">Sign in to get started</div>
+
+    <a href="/auth/google" class="google-btn">
+      <svg class="google-icon" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Continue with Google
+    </a>
+
+    <p class="terms">
+      By signing in, you agree to use InterviuX for<br>
+      interview preparation purposes only.
+    </p>
+  </div>
+</body>
+</html>
