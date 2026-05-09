@@ -1581,34 +1581,56 @@
         </div>
       </div>
 
-      <div class="upload-zone" id="uploadZone"
-        ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
-        ondrop="handleDrop(event)">
-        <div class="upload-row">
-          <svg class="resume-doc-icon" viewBox="0 0 40 52" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4 2h22l10 10v36a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="white" stroke="#d1d5db" stroke-width="1"/>
-            <path d="M26 2v10h10" fill="#e5e7eb" stroke="#d1d5db" stroke-width="1"/>
-            <rect x="8" y="20" width="18" height="1.8" rx="0.9" fill="#9ca3af"/>
-            <rect x="8" y="25" width="22" height="1.8" rx="0.9" fill="#9ca3af"/>
-            <rect x="8" y="30" width="20" height="1.8" rx="0.9" fill="#9ca3af"/>
-            <rect x="8" y="35" width="15" height="1.8" rx="0.9" fill="#9ca3af"/>
-            <rect x="8" y="12" width="10" height="2.5" rx="1" fill="#6b7280"/>
-          </svg>
-          <label class="file-pick-label" for="fileInput">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
+      <!-- Resume input mode tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:.75rem">
+        <button class="btn sm" id="tabPdfBtn" onclick="switchResumeTab('pdf')" style="border-radius:10px">📄 Upload PDF</button>
+        <button class="btn sm ghost" id="tabTextBtn" onclick="switchResumeTab('text')" style="border-radius:10px">📝 Paste Text</button>
+      </div>
+
+      <!-- PDF upload tab -->
+      <div id="resumeTabPdf">
+        <div class="upload-zone" id="uploadZone"
+          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
+          ondrop="handleDrop(event)">
+          <div class="upload-row">
+            <svg class="resume-doc-icon" viewBox="0 0 40 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4 2h22l10 10v36a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="white" stroke="#d1d5db" stroke-width="1"/>
+              <path d="M26 2v10h10" fill="#e5e7eb" stroke="#d1d5db" stroke-width="1"/>
+              <rect x="8" y="20" width="18" height="1.8" rx="0.9" fill="#9ca3af"/>
+              <rect x="8" y="25" width="22" height="1.8" rx="0.9" fill="#9ca3af"/>
+              <rect x="8" y="30" width="20" height="1.8" rx="0.9" fill="#9ca3af"/>
+              <rect x="8" y="35" width="15" height="1.8" rx="0.9" fill="#9ca3af"/>
+              <rect x="8" y="12" width="10" height="2.5" rx="1" fill="#6b7280"/>
             </svg>
-            Choose File
-          </label>
-          <input type="file" id="fileInput" accept=".pdf" onchange="fileSelected(this)">
-          <span class="file-name-display" id="uploadFileName">No file chosen</span>
-          <button class="btn" onclick="analyzeResume()" id="analyzeBtn" disabled>
-            ▶ Analyze Resume
-          </button>
+            <label class="file-pick-label" for="fileInput">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Choose File
+            </label>
+            <input type="file" id="fileInput" accept=".pdf" onchange="fileSelected(this)">
+            <span class="file-name-display" id="uploadFileName">No file chosen</span>
+            <button class="btn" onclick="analyzeResume()" id="analyzeBtn" disabled>
+              ▶ Analyze Resume
+            </button>
+          </div>
+          <div class="upload-hint">PDF format · max 10 MB · or drag &amp; drop here</div>
         </div>
-        <div class="upload-hint">PDF format · max 10 MB · or drag &amp; drop here</div>
+      </div>
+
+      <!-- Plain text paste tab -->
+      <div id="resumeTabText" style="display:none">
+        <div class="upload-zone" style="padding:1rem">
+          <textarea id="resumeTextInput" placeholder="Paste your resume text here…&#10;&#10;Include your experience, skills, education, and projects." style="width:100%;min-height:220px;background:transparent;border:none;outline:none;resize:vertical;font-family:var(--mono);font-size:.8rem;color:var(--text2);line-height:1.7" oninput="resumeTextChanged()"></textarea>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:.75rem;flex-wrap:wrap;gap:.5rem">
+            <span class="upload-hint" style="margin-top:0" id="resumeTextCharCount">0 characters</span>
+            <button class="btn" onclick="analyzeResumeText()" id="analyzeTextBtn" disabled>
+              ▶ Analyze Resume
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="progress mt-2" id="uploadProgress">
@@ -1671,6 +1693,13 @@
     <!-- Interview View -->
     <div id="interviewSection" style="display:none" class="fade-in">
 
+      <!-- Camera auto-prompt banner -->
+      <div id="cameraPromptBanner" style="display:none;align-items:center;gap:.75rem;background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:12px;padding:.65rem 1rem;margin-bottom:.85rem;flex-wrap:wrap">
+        <span style="font-size:.82rem;color:var(--purple2);flex:1">📹 <strong>Enable camera</strong> for posture &amp; confidence tracking during your session.</span>
+        <button class="btn sm" onclick="startCamera();document.getElementById('cameraPromptBanner').style.display='none'" style="flex-shrink:0">Enable Camera</button>
+        <button class="btn sm ghost" onclick="document.getElementById('cameraPromptBanner').style.display='none'" style="flex-shrink:0">Skip</button>
+      </div>
+
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
         <div>
           <div class="section-label">Mock Interview Session</div>
@@ -1688,16 +1717,6 @@
       <div class="interview-grid">
         <!-- Main Column -->
         <div>
-          <!-- Question Type Selector -->
-          <div style="display:flex;gap:.5rem;margin-bottom:.75rem;flex-wrap:wrap" id="qTypeSelector">
-            <div class="text-muted" style="align-self:center">Question type:</div>
-            <button class="btn sm ghost" onclick="setQType('technical')" data-qtype="technical">Technical</button>
-            <button class="btn sm" onclick="setQType('behavioral')" data-qtype="behavioral">Behavioral</button>
-            <button class="btn sm ghost" onclick="setQType('system_design')" data-qtype="system_design">System
-              Design</button>
-            <button class="btn sm ghost" onclick="setQType('coding')" data-qtype="coding">Coding</button>
-          </div>
-
           <div class="q-box" id="questionBox">
             <div class="q-number" id="qNumberLabel">QUESTION 1 OF 5</div>
             <div class="q-type-badge" id="qTypeBadge">⚙ Technical</div>
@@ -1728,7 +1747,7 @@
             <div id="textInputContainer">
               <textarea class="answer-textarea" id="answerInput"
                 placeholder="Type your answer here... (or use the mic button to record)"
-                oninput="updateWordCount()"></textarea>
+                oninput="updateWordCount();if(this.value.length>30)startTextCoachingEngine();else stopTextCoachingEngine()"></textarea>
               <div style="text-align:right;font-size:.78rem;margin-top:.25rem">
                 <span id="wordCountDisplay" style="color:var(--muted)">0 / 500 words</span>
               </div>
@@ -2024,6 +2043,7 @@
       startRecTime: 0,
       // visual
       cameraOn: false,
+      recoveryCount: 0,    // tracks consecutive good answers after warmup recovery
       stream: null,
       faceApiLoaded: false,
       faceDetectionInterval: null,
@@ -2065,6 +2085,50 @@
       const el = document.getElementById('uploadFileName');
       el.textContent = name;
       el.classList.toggle('chosen', !!name && name !== 'No file chosen');
+    }
+
+    // ── RESUME INPUT TAB SWITCHER ──────────────────────────────────────────────
+    function switchResumeTab(tab) {
+      const isPdf = tab === 'pdf';
+      document.getElementById('resumeTabPdf').style.display = isPdf ? '' : 'none';
+      document.getElementById('resumeTabText').style.display = isPdf ? 'none' : '';
+      document.getElementById('tabPdfBtn').className = isPdf ? 'btn sm' : 'btn sm ghost';
+      document.getElementById('tabTextBtn').className = isPdf ? 'btn sm ghost' : 'btn sm';
+    }
+
+    function resumeTextChanged() {
+      const ta = document.getElementById('resumeTextInput');
+      const len = ta.value.trim().length;
+      document.getElementById('resumeTextCharCount').textContent = len + ' characters';
+      document.getElementById('analyzeTextBtn').disabled = len < 100;
+    }
+
+    async function analyzeResumeText() {
+      const text = (document.getElementById('resumeTextInput').value || '').trim();
+      if (text.length < 100) return;
+      const btn = document.getElementById('analyzeTextBtn');
+      btn.disabled = true;
+      document.getElementById('resultsSection').style.display = 'none';
+      setStatus('Reading text...', 15);
+
+      try {
+        setStatus('Analyzing resume with AI...', 40);
+        const res = await fetch('/analyze-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeText: text })
+        });
+        setStatus('Inferring roles...', 70);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+        setStatus('Complete!', 100);
+        state.analysisData = data.analysis;
+        state.resumeText = data.resumeText || text;
+        setTimeout(() => renderResults(data.analysis), 300);
+      } catch (err) {
+        setStatus('Error: ' + err.message, 0);
+        btn.disabled = false;
+      }
     }
 
     function fileSelected(input) {
@@ -2224,57 +2288,6 @@
       return counts;
     }
 
-    function updateTypeButtons() {
-      const counts = getTypeCounts();
-      document.querySelectorAll('[data-qtype]').forEach(b => {
-        const type = b.dataset.qtype;
-        const limit = state.typeLimits[type] || 0;
-        const current = counts[type] || 0;
-        
-        // Disable button if limit reached
-        if (current >= limit) {
-          b.disabled = true;
-          b.classList.add('disabled');
-          b.title = `Limit reached for ${type} questions`;
-        } else {
-          b.disabled = false;
-          b.classList.remove('disabled');
-          b.title = '';
-        }
-
-        // Keep active styling if it's the current selected type
-        if (type === state.questionType) {
-          b.className = b.disabled ? 'btn sm disabled' : 'btn sm';
-        } else {
-          b.className = b.disabled ? 'btn sm ghost disabled' : 'btn sm ghost';
-        }
-      });
-    }
-
-    function setQType(type) {
-      const counts = getTypeCounts();
-      if (counts[type] >= (state.typeLimits[type] || 0)) {
-        return; // Already reached limit
-      }
-
-      state.questionType = type;
-      updateTypeButtons();
-      
-      const codePanel = document.getElementById('codeEditorPanel');
-      if (codePanel) codePanel.style.display = type === 'coding' ? 'block' : 'none';
-      
-      const textInput = document.getElementById('textInputContainer');
-      if (textInput) textInput.style.display = type === 'coding' ? 'none' : 'block';
-
-      const micBtn = document.getElementById('micBtn');
-      if (micBtn) micBtn.style.display = type === 'coding' ? 'none' : 'inline-flex';
-
-      // If in an active interview, regenerate the current question with the new type
-      if (document.getElementById('interviewSection').style.display === 'block' && state.questionCount > 0) {
-        fetchNextQuestion(true);
-      }
-    }
-
     function startInterview() {
       document.getElementById('resultsSection').style.display = 'none';
       document.getElementById('uploadSection').style.display = 'none';
@@ -2293,6 +2306,7 @@
       state.typeHistory = [];
       state.transcript = '';
       state.fillerCount = 0;
+      state.recoveryCount = 0;
 
       document.getElementById('interviewRoleLabel').textContent = state.currentRole;
       document.getElementById('qProgress').textContent = 'Q0/' + state.maxQuestions;
@@ -2305,28 +2319,18 @@
       if (isNonTech) {
         state.questionSequence = ['technical', 'technical', 'technical', 'technical', 'behavioral', 'behavioral', 'technical', 'technical', 'technical', 'technical'];
         state.typeLimits = { technical: 8, behavioral: 2, system_design: 0, coding: 0 };
-        const sdBtn = document.querySelector('[data-qtype="system_design"]');
-        const cBtn = document.querySelector('[data-qtype="coding"]');
-        if (sdBtn) sdBtn.style.display = 'none';
-        if (cBtn) cBtn.style.display = 'none';
       } else {
         state.questionSequence = ['technical', 'technical', 'technical', 'technical', 'technical', 'behavioral', 'behavioral', 'system_design', 'system_design', 'coding'];
         state.typeLimits = { technical: 5, behavioral: 2, system_design: 2, coding: 1 };
-        const sdBtn = document.querySelector('[data-qtype="system_design"]');
-        const cBtn = document.querySelector('[data-qtype="coding"]');
-        if (sdBtn) sdBtn.style.display = '';
-        if (cBtn) cBtn.style.display = '';
       }
 
       // Start with the first type in the sequence
-      const initialType = state.questionSequence[0];
-      state.questionType = initialType;
-      document.querySelectorAll('[data-qtype]').forEach(b => {
-        b.className = b.dataset.qtype === initialType ? 'btn sm' : 'btn sm ghost';
-      });
+      state.questionType = state.questionSequence[0];
       
       fetchNextQuestion();
       initFaceApi();
+      // Auto-prompt camera at session start (opt-in, but surfaced upfront per session flow)
+      promptCameraStart();
     }
 
     function buildProgressDots() {
@@ -2368,19 +2372,13 @@
       if (wcd) { wcd.textContent = '0 / 500 words'; wcd.style.color = 'var(--muted)'; }
 
       try {
-        // Automatically determine type based on sequence if not regenerating
+        // Automatically determine type based on sequence position
         const questionNum = isRegenerate ? state.questionCount : state.questionCount + 1;
         if (!isRegenerate) {
-          const counts = getTypeCounts();
-          // If current type is exhausted, find the next available type
-          if (counts[state.questionType] >= (state.typeLimits[state.questionType] || 0)) {
-            const types = ['technical', 'behavioral', 'system_design', 'coding'];
-            const available = types.find(t => counts[t] < (state.typeLimits[t] || 0));
-            if (available) state.questionType = available;
-          }
-          // If not exhausted, we simply stay in state.questionType
+          // Use the sequence to determine the next question type
+          const seqIndex = state.questionCount; // 0-based index into sequence
+          state.questionType = state.questionSequence[seqIndex] || 'technical';
         }
-        updateTypeButtons();
         
         const codePanel = document.getElementById('codeEditorPanel');
         if (codePanel) codePanel.style.display = state.questionType === 'coding' ? 'block' : 'none';
@@ -2566,16 +2564,28 @@
         }
 
         state.lastScore = ev.score;
-        // Phase-based adaptive logic
+        // Phase-based adaptive logic with gradual re-escalation after recovery
         if (ev.score < 5) {
           state.consecutiveLowScores++;
+          state.recoveryCount = 0; // reset recovery progress on a bad answer
           if (state.consecutiveLowScores >= 2 && state.interviewPhase !== 'warmup') {
             state.interviewPhase = 'warmup'; // Drop back to easier questions
           }
         } else {
           state.consecutiveLowScores = 0;
-          if (state.questionCount >= 2) state.interviewPhase = 'core';
-          if (state.questionCount >= 4 && ev.score >= 7) state.interviewPhase = 'deepdive';
+          // Gradual re-escalation: only advance phase after consecutive good answers
+          // This prevents jumping from warmup straight to deepdive after one good answer
+          if (state.interviewPhase === 'warmup') {
+            state.recoveryCount = (state.recoveryCount || 0) + 1;
+            if (state.recoveryCount >= 2 && state.questionCount >= 2) {
+              state.interviewPhase = 'core'; // promote to core after 2 good answers from warmup
+              state.recoveryCount = 0;
+            }
+          } else {
+            // Normal (non-recovery) escalation
+            if (state.questionCount >= 2 && state.interviewPhase === 'warmup') state.interviewPhase = 'core';
+            if (state.questionCount >= 4 && ev.score >= 7 && state.interviewPhase === 'core') state.interviewPhase = 'deepdive';
+          }
         }
         // Capture current audio metrics before reset
         const curPitchVar = state.pitchVariation;
@@ -2603,8 +2613,6 @@
           concept: state.currentConcept || ev.primary_concept || 'General',
           type: state.currentQuestionType
         });
-
-        updateTypeButtons();
 
         renderFeedback(finalAnswer, ev, comm, visualScore, curPitchVar, curHesitation);
         updateCumulativeScores();
@@ -2757,8 +2765,6 @@
         concept: state.currentConcept || 'General',
         type: state.currentQuestionType
       });
-
-      updateTypeButtons();
 
       updateCumulativeScores();
 
@@ -2998,6 +3004,19 @@
     // ═══════════════════════════════════════════════════════
     // REAL-TIME COACHING ENGINE
     // ═══════════════════════════════════════════════════════
+    function startTextCoachingEngine() {
+      // Fires mid-answer coaching hints while user types (non-mic mode)
+      document.getElementById('coachingPanel').style.display = 'block';
+      updateCoachingHints();
+      if (state.coachingInterval) clearInterval(state.coachingInterval);
+      state.coachingInterval = setInterval(updateCoachingHints, 2500);
+    }
+
+    function stopTextCoachingEngine() {
+      if (state.coachingInterval) { clearInterval(state.coachingInterval); state.coachingInterval = null; }
+      document.getElementById('coachingPanel').style.display = 'none';
+    }
+
     function startCoachingEngine() {
       document.getElementById('coachingPanel').style.display = 'block';
       updateCoachingHints();
@@ -3286,6 +3305,13 @@
     // CAMERA / VISUAL INTELLIGENCE
     // ═══════════════════════════════════════════════════════
     let faceDetectLoop = null;
+
+    function promptCameraStart() {
+      // Auto-prompt the user to enable camera at interview start if not already on
+      if (state.cameraOn) return;
+      const prompt = document.getElementById('cameraPromptBanner');
+      if (prompt) { prompt.style.display = 'flex'; }
+    }
 
     async function toggleCamera() {
       if (state.cameraOn) stopCamera();
