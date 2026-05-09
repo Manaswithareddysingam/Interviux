@@ -331,12 +331,14 @@
       transform: translateY(0) scale(.97)
     }
 
-    .btn:disabled {
+    .btn:disabled, .btn.disabled {
       background: var(--surface2);
       color: var(--muted);
       cursor: not-allowed;
       transform: none;
-      box-shadow: none
+      box-shadow: none;
+      opacity: 0.6;
+      filter: grayscale(1);
     }
 
     .btn.ghost {
@@ -1988,6 +1990,12 @@
         'system_design', 'system_design',
         'coding'
       ],
+      typeLimits: {
+        technical: 5,
+        behavioral: 2,
+        system_design: 2,
+        coding: 1
+      },
       typeHistory: [], // Tracks the type of each question actually asked
       allScores: [],       // { q, score, comm, conf }
       techScores: [],
@@ -2171,11 +2179,52 @@
     // ═══════════════════════════════════════════════════════
     // INTERVIEW
     // ═══════════════════════════════════════════════════════
-    function setQType(type) {
-      state.questionType = type;
-      document.querySelectorAll('[data-qtype]').forEach(b => {
-        b.className = b.dataset.qtype === type ? 'btn sm' : 'btn sm ghost';
+    function getTypeCounts() {
+      const counts = { technical: 0, behavioral: 0, system_design: 0, coding: 0 };
+      state.allScores.forEach(s => {
+        if (s.type && counts.hasOwnProperty(s.type)) {
+          counts[s.type]++;
+        }
       });
+      return counts;
+    }
+
+    function updateTypeButtons() {
+      const counts = getTypeCounts();
+      document.querySelectorAll('[data-qtype]').forEach(b => {
+        const type = b.dataset.qtype;
+        const limit = state.typeLimits[type] || 0;
+        const current = counts[type] || 0;
+        
+        // Disable button if limit reached
+        if (current >= limit) {
+          b.disabled = true;
+          b.classList.add('disabled');
+          b.title = `Limit reached for ${type} questions`;
+        } else {
+          b.disabled = false;
+          b.classList.remove('disabled');
+          b.title = '';
+        }
+
+        // Keep active styling if it's the current selected type
+        if (type === state.questionType) {
+          b.className = b.disabled ? 'btn sm disabled' : 'btn sm';
+        } else {
+          b.className = b.disabled ? 'btn sm ghost disabled' : 'btn sm ghost';
+        }
+      });
+    }
+
+    function setQType(type) {
+      const counts = getTypeCounts();
+      if (counts[type] >= (state.typeLimits[type] || 0)) {
+        return; // Already reached limit
+      }
+
+      state.questionType = type;
+      updateTypeButtons();
+      
       const codePanel = document.getElementById('codeEditorPanel');
       if (codePanel) codePanel.style.display = type === 'coding' ? 'block' : 'none';
 
@@ -2260,13 +2309,16 @@
         // Automatically determine type based on sequence if not regenerating
         const questionNum = isRegenerate ? state.questionCount : state.questionCount + 1;
         if (!isRegenerate) {
-          const autoType = state.questionSequence[questionNum - 1] || 'technical';
-          state.questionType = autoType;
-          // Update the type selector buttons to show what's active
-          document.querySelectorAll('[data-qtype]').forEach(b => {
-            b.className = b.dataset.qtype === autoType ? 'btn sm' : 'btn sm ghost';
-          });
+          const counts = getTypeCounts();
+          // If current type is exhausted, find the next available type
+          if (counts[state.questionType] >= (state.typeLimits[state.questionType] || 0)) {
+            const types = ['technical', 'behavioral', 'system_design', 'coding'];
+            const available = types.find(t => counts[t] < (state.typeLimits[t] || 0));
+            if (available) state.questionType = available;
+          }
+          // If not exhausted, we simply stay in state.questionType
         }
+        updateTypeButtons();
 
         const targetType = state.questionType;
         const res = await fetch('/generate-question', {
@@ -2473,8 +2525,11 @@
           score: ev.score,
           comm: comm.confidence_score || null,
           conf: visualScore,
-          concept: state.currentConcept || ev.primary_concept || 'General'
+          concept: state.currentConcept || ev.primary_concept || 'General',
+          type: state.currentQuestionType
         });
+
+        updateTypeButtons();
 
         renderFeedback(finalAnswer, ev, comm, visualScore, curPitchVar, curHesitation);
         updateCumulativeScores();
@@ -2624,8 +2679,11 @@
         comm: 0,
         conf: visualScore,
         skipped: true,
-        concept: state.currentConcept || 'General'
+        concept: state.currentConcept || 'General',
+        type: state.currentQuestionType
       });
+
+      updateTypeButtons();
 
       updateCumulativeScores();
 
