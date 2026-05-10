@@ -10,6 +10,9 @@
     href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <!-- MediaPipe Pose (BlazePose) — real skeleton model for posture analysis -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -3504,6 +3507,132 @@
       document.getElementById('stressVal').textContent = '—';
     }
 
+    // ─── MediaPipe BlazePose state ────────────────────────────────────────────
+    let _mpPose = null;          // MediaPipe Pose instance
+    let _mpPoseReady = false;    // true once model weights are loaded
+    let _lastPoseLandmarks = null; // most recent skeleton from onResults callback
+
+    /**
+     * Initialise the MediaPipe Pose model (BlazePose GHUM lite).
+     * The model runs asynchronously via its own internal loop; we register
+     * onResults once and call pose.send() from the face-detect interval.
+     */
+    async function initMediaPipePose(vid) {
+      if (_mpPose) return; // already initialised
+      if (typeof Pose === 'undefined') return; // CDN not loaded yet
+
+      _mpPose = new Pose({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+      });
+
+      _mpPose.setOptions({
+        modelComplexity: 0,        // 0 = Lite — fastest, still full 33-landmark skeleton
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      _mpPose.onResults((results) => {
+        // Store the latest skeleton for the face-detect interval to consume
+        _lastPoseLandmarks = results.poseLandmarks || null;
+      });
+
+      try {
+        // Send one blank frame to trigger weight download before first real frame
+        await _mpPose.initialize();
+        _mpPoseReady = true;
+        console.log('✅ MediaPipe BlazePose loaded');
+      } catch (e) {
+        console.warn('⚠ MediaPipe Pose failed to initialise:', e.message);
+        _mpPose = null;
+      }
+    }
+
+    /**
+     * Derive a structured posture assessment from 33 BlazePose landmarks.
+     *
+     * Landmark indices (MediaPipe convention):
+     *   0  = nose
+     *   11 = left shoulder   12 = right shoulder
+     *   13 = left elbow      14 = right elbow
+     *   23 = left hip        24 = right hip
+     *   All coordinates are normalised [0,1] relative to the image.
+     *
+     * Checks performed with real skeleton geometry:
+     *   1. Shoulder level  — are shoulders horizontal or hunched to one side?
+     *   2. Forward lean    — nose Y vs mid-shoulder Y (leaning into camera?)
+     *   3. Spine vertical  — mid-shoulder Y vs mid-hip Y (slouching?)
+     *   4. Shoulder width  — are shoulders visible / squared to camera?
+     *   5. Head centering  — nose X vs mid-shoulder X (looking off to side?)
+     */
+    function assessPostureFromLandmarks(lm) {
+      // Helper: safe landmark accessor (returns null if confidence < threshold)
+      const pt = (i) => (lm[i] && lm[i].visibility > 0.4) ? lm[i] : null;
+
+      const nose   = pt(0);
+      const lSh    = pt(11);
+      const rSh    = pt(12);
+      const lHip   = pt(23);
+      const rHip   = pt(24);
+
+      const issues = [];
+
+      if (lSh && rSh) {
+        const midShX = (lSh.x + rSh.x) / 2;
+        const midShY = (lSh.y + rSh.y) / 2;
+
+        // 1. Shoulder level — Y difference between shoulders
+        const shoulderDiffY = Math.abs(lSh.y - rSh.y);
+        if (shoulderDiffY > 0.06) {
+          issues.push({ s: 'Shoulders Uneven ↗', sc: 7 });
+        }
+
+        // 2. Forward lean — nose should be close to mid-shoulder X
+        if (nose) {
+          const headLeanX = Math.abs(nose.x - midShX);
+          if (headLeanX > 0.10) {
+            issues.push({ s: 'Head Off-Center ↔', sc: 7 });
+          }
+
+          // Eye-contact proxy: nose X centring in frame (0.5 = straight ahead)
+          const noseHorizOff = Math.abs(nose.x - 0.5);
+          if (noseHorizOff > 0.18) {
+            issues.push({ s: 'Not Facing Camera 👀', sc: 6 });
+          }
+        }
+
+        // 3. Spine vertical — shoulder Y vs hip Y (slouching pulls shoulders down / forward)
+        if (lHip && rHip) {
+          const midHipY = (lHip.y + rHip.y) / 2;
+          const spineLen = midHipY - midShY; // positive = hips below shoulders (normal)
+          if (spineLen < 0.12) {
+            // Shoulders and hips at similar Y → very hunched / leaning forward
+            issues.push({ s: 'Slouching 📉', sc: 4 });
+          } else if (midShY > 0.55) {
+            // Shoulders very low in frame → sitting too far back or camera too high
+            issues.push({ s: 'Sit Up Straight ↑', sc: 6 });
+          }
+        }
+
+        // 4. Shoulder width — narrow means body is turned sideways
+        const shoulderWidth = Math.abs(lSh.x - rSh.x);
+        if (shoulderWidth < 0.10) {
+          issues.push({ s: 'Body Turned ↩', sc: 7 });
+        }
+      }
+
+      if (issues.length === 0) {
+        return { status: 'Good Posture ✅', score: 10 };
+      }
+      const worst = issues.reduce((a, b) => b.sc < a.sc ? b : a);
+      return {
+        status: worst.s + (issues.length > 1 ? ` +${issues.length - 1}` : ''),
+        score: worst.sc
+      };
+    }
+
     async function initFaceApi() {
       if (!state.cameraOn) return;
       if (!window.faceapi) {
@@ -3520,6 +3649,10 @@
           ]);
           state.faceApiLoaded = true;
         }
+        // Kick off BlazePose loading in parallel (non-blocking — face detection
+        // starts immediately; posture upgrades automatically once model is ready)
+        const vid = document.getElementById('webcamVideo');
+        initMediaPipePose(vid).catch(() => {}); // silent failure → fallback to '—'
         startFaceDetection();
       } catch (_) {
         startSimulatedVisual();
@@ -3532,6 +3665,7 @@
       faceDetectLoop = setInterval(async () => {
         if (!state.cameraOn || !vid.readyState >= 2) return;
         try {
+          // ── face-api.js: TinyFaceDetector + FaceExpressionNet ──────────────
           const detection = await faceapi
             .detectSingleFace(vid, new faceapi.TinyFaceDetectorOptions())
             .withFaceExpressions();
@@ -3548,50 +3682,56 @@
           const dominant = Object.entries(expr).reduce((a, b) => b[1] > a[1] ? b : a)[0];
           const box = detection.detection.box;
           const vidW = vid.videoWidth || 640;
-          const vidH = vid.videoHeight || 480;
           const centerX = box.x + box.width / 2;
-          const centerY = box.y + box.height / 2;
+          const horizOff = Math.abs((centerX / vidW) - 0.5);
 
-          // Posture Heuristic (multi-factor): vertical + horizontal + distance + head tilt
-          const relX     = centerX / vidW;
-          const relY     = centerY / vidH;
-          const faceRel  = box.width / vidW;              // face-width ratio = distance proxy
-          const aspectR  = box.width / (box.height || 1); // normal human face ≈ 0.75–0.88
-          const horizOff = Math.abs(relX - 0.5);
+          // Eye contact derived from face-api horizontal centering
+          const eyeContact = Math.max(0, 1 - horizOff * 2);
 
-          const issues = [];
-          if (faceRel > 0.55)                        issues.push({ s: "Too Close 🔍",   sc: 6 });
-          else if (faceRel < 0.11)                   issues.push({ s: "Too Far Back 🔙", sc: 6 });
-          if (relY > 0.68)                           issues.push({ s: "Slouching 📉",    sc: 4 });
-          else if (relY < 0.18)                      issues.push({ s: "Sitting Up ↑",    sc: 7 });
-          if (horizOff > 0.28)                       issues.push({ s: "Off-Center ↔",    sc: 7 });
-          if (aspectR > 0.97 || aspectR < 0.60)     issues.push({ s: "Head Tilted 🤔",  sc: 8 });
+          const engagementScore = Math.round(
+            (eyeContact * 0.4 + (expr.neutral + (expr.happy || 0)) * 0.6) * 10
+          );
+          const stressScore = Math.round(
+            ((expr.fearful || 0) + (expr.angry || 0) + (expr.disgusted || 0)) * 10
+          );
 
-          let postureStatus, postureScore;
-          if (issues.length === 0) {
-            postureStatus = "Good ✅";
-            postureScore  = 10;
-          } else {
-            const worst = issues.reduce((a, b) => b.sc < a.sc ? b : a);
-            postureScore  = worst.sc;
-            postureStatus = worst.s + (issues.length > 1 ? ` +${issues.length - 1}` : '');
+          // ── MediaPipe BlazePose: real skeleton posture analysis ─────────────
+          // Feed current video frame to BlazePose (result arrives asynchronously
+          // via onResults callback and is stored in _lastPoseLandmarks).
+          let postureStatus = '—';
+          let postureScore  = 7; // neutral fallback while model loads
+
+          if (_mpPoseReady && _mpPose) {
+            try {
+              // send() is non-blocking; result updates _lastPoseLandmarks via callback
+              await _mpPose.send({ image: vid });
+            } catch (_) {}
+          }
+
+          if (_lastPoseLandmarks) {
+            const pa = assessPostureFromLandmarks(_lastPoseLandmarks);
+            postureStatus = pa.status;
+            postureScore  = pa.score;
+          } else if (!_mpPoseReady) {
+            postureStatus = _mpPose ? 'Pose loading…' : 'No skeleton model';
           }
 
           // Smooth posture score over last 5 samples to reduce jitter
           state.postureSamples.push(postureScore);
           if (state.postureSamples.length > 5) state.postureSamples.shift();
-          const smoothedPosture = state.postureSamples.reduce((a, b) => a + b, 0) / state.postureSamples.length;
+          const smoothedPosture =
+            state.postureSamples.reduce((a, b) => a + b, 0) / state.postureSamples.length;
 
-          const eyeContact = 1 - horizOff * 2;
-          const engagementScore = Math.round((eyeContact * 0.4 + (expr.neutral + (expr.happy || 0)) * 0.6) * 10);
-          const stressScore = Math.round(((expr.fearful || 0) + (expr.angry || 0) + (expr.disgusted || 0)) * 10);
           const visualScore = Math.min(10, Math.max(1, (engagementScore + smoothedPosture) / 2));
 
           state.visualReadings.push(visualScore);
           state.currentEngagement = visualScore;
           state.currentExpression = dominant;
 
-          const exprEmoji = { happy: '😊', neutral: '😐', surprised: '😮', sad: '😔', fearful: '😰', angry: '😤', disgusted: '😒' };
+          const exprEmoji = {
+            happy: '😊', neutral: '😐', surprised: '😮',
+            sad: '😔', fearful: '😰', angry: '😤', disgusted: '😒'
+          };
           document.getElementById('engagementVal').textContent = Math.round(visualScore) + '/10';
           document.getElementById('expressionVal').textContent = (exprEmoji[dominant] || '😐') + ' ' + dominant;
           document.getElementById('eyeContactVal').textContent = Math.round(eyeContact * 10) + '/10';
