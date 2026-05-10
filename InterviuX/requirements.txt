@@ -1,0 +1,16 @@
+# InterviuX Core Requirements
+
+## Backend (Node.js)
+The project uses Node.js (v18+). Main dependencies are managed in `backend/package.json`.
+- express: Web framework
+- multer: File upload handling
+- pdf-parse: Resume text extraction
+- groq-sdk: AI Orchestration (via fetch)
+
+## Frontend (Vanilla JS)
+- face-api.js: Computer Vision / Emotion / Posture detection
+- Web Audio API: Pitch & Hesitation analysis
+- Web Speech API: Real-time transcription
+
+## Setup
+Run `npm install` inside the `backend/` directory.

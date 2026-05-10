@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "analysis": {
+    "suggested_roles": [
+      {
+        "title": "AI Engineer",
+        "match_percent": 95,
+        "reason": "Strong background in Computer Vision and Deep Learning projects."
+      },
+      {
+        "title": "Full Stack Developer (AI-focused)",
+        "match_percent": 88,
+        "reason": "Experience with React, FastAPI, and Flask combined with ML integration."
+      }
+    ],
+    "strengths": [
+      "Computer Vision Mastery",
+      "Full-stack AI Integration",
+      "Prompt Engineering expertise"
+    ],
+    "weaknesses": [
+      "Limited exposure to cloud-native scaling (Kubernetes)"
+    ],
+    "seniority": "Junior / Entry-Level",
+    "domain": "ML/AI"
+  }
+}

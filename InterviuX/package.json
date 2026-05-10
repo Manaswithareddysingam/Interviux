@@ -1,23 +1,12 @@
 {
-  "name": "interviux",
+  "name": "interviux-root",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Root entry point for InterviuX",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "cd backend && npm start",
+    "install": "cd backend && npm install",
+    "setup": "cd backend && npm install"
   },
-  "keywords": [],
   "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-session": "^1.19.0",
-    "multer": "^2.1.1",
-    "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
-    "pdf-parse": "^1.1.1"
-  },
-  "description": ""
+  "license": "ISC"
 }

@@ -1,0 +1,17 @@
+[
+  {
+    "phase": "Warm-up",
+    "question": "Can you walk us through the architecture of your Human Pose Estimator and how you used MediaPipe for posture accuracy?",
+    "concept": "Pose Estimation / MediaPipe"
+  },
+  {
+    "phase": "Core",
+    "question": "In your Bio-Mind project, how did you implement the NLP-based querying for biomedical APIs using FastAPI?",
+    "concept": "FastAPI / NLP Integration"
+  },
+  {
+    "phase": "Deep-dive",
+    "question": "At Navatej Technologies, you worked on LiDAR analysis. How would you architect a scalable pipeline for real-time 3D spatial measurements?",
+    "concept": "System Architecture / 3D Data"
+  }
+]

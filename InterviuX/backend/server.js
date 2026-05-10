@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const cors = require('cors');
@@ -56,7 +58,8 @@ app.get('/auth/user', (req, res) => {
   res.json({ user: req.user });
 });
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '../frontend')));
+
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
